@@ -16,41 +16,92 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-    "os"
+	"os"
+	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
-type Response struct {
-	Countries	[]Countries	`json:"countries"`
+// Corona Global Cases
+type ResponseGlobal struct {
+	Confirmed  Confirmed `json:"confirmed"`
+	Recovered  Recovered `json:"recovered"`
+	Deaths     Deaths    `json:"deaths"`
+	LastUpdate string    `json:"lastUpdate"`
+}
+
+type Confirmed struct {
+	Value int `json:"value"`
+}
+
+type Recovered struct {
+	Value int `json:"value"`
+}
+
+type Deaths struct {
+	Value int `json:"value"`
+}
+
+// Corona Country Cases
+type ResponseCountryCase struct {
+	CConfirmed  CConfirmed `json:"confirmed"`
+	CRecovered  CRecovered `json:"recovered"`
+	CDeaths     CDeaths    `json:"deaths"`
+	CLastUpdate string     `json:"lastUpdate"`
+}
+
+type CConfirmed struct {
+	Value int `json:"value"`
+}
+
+type CRecovered struct {
+	Value int `json:"value"`
+}
+
+type CDeaths struct {
+	Value int `json:"value"`
+}
+
+// Corona Country Lists
+type ResponseCountries struct {
+	Countries []Countries `json:"countries"`
 }
 
 type Countries struct {
-	Name	string	`json:"name"`
-	Iso2	string	`json:"iso2"`
-	Iso3	string	`json:"iso3"`
+	Name string `json:"name"`
+	Iso2 string `json:"iso2"`
+	Iso3 string `json:"iso3"`
 }
+
+var country string
 
 // coronaCmd represents the corona command
 var coronaCmd = &cobra.Command{
 	Use:   "corona",
-	Short: "Display command for the Coronavirus Disease 19 Data",
-	Long: `Coronavirus Disease 19 Data`,
+	Short: "Display command for the Coronavirus Disease 19 Data, Data sources from Muhammad Mustadi's API",
+	Long:  `Coronavirus Disease 19 Data`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("corona called")
+		country, _ := cmd.Flags().GetString("country")
+		if country != "" {
+			getCountryCase()
+		} else {
+			getGlobalCase()
+		}
 	},
 }
 
 // countryCmd represents the coro subcommands
 var countryCmd = &cobra.Command{
-	Use: "country",
+	Use:   "country",
 	Short: "Display command for the show all Country affected by covid19",
-	Long: `All Country affected by Covid-19`,
-	Run: func (cmd *cobra.Command, args []string) {
+	Long:  `All Country affected by Covid-19`,
+	Run: func(cmd *cobra.Command, args []string) {
 		getCountry()
 	},
 }
@@ -59,6 +110,67 @@ func init() {
 	rootCmd.AddCommand(coronaCmd)
 
 	coronaCmd.AddCommand(countryCmd)
+	coronaCmd.Flags().StringVarP(&country, "country", "c", "", "Covid-19 affected countries")
+}
+
+func getGlobalCase() {
+	p := message.NewPrinter(language.English)
+	response, err := http.Get("https://covid19.mathdro.id/api")
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	responseData, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var responseObject ResponseGlobal
+	json.Unmarshal(responseData, &responseObject)
+
+	lastTimeUpdate := (responseObject.LastUpdate)
+	t, err := time.Parse(time.RFC3339, lastTimeUpdate)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("--- Coronavirus 19 Disease Global Cases ---")
+	p.Printf("Status Confirmed : %d\n", responseObject.Confirmed.Value)
+	p.Printf("Status Recovered : %d\n", responseObject.Recovered.Value)
+	p.Printf("Status Deaths : %d\n", responseObject.Deaths.Value)
+	fmt.Println("Last Updated : ", t)
+
+}
+
+func getCountryCase() {
+	p := message.NewPrinter(language.English)
+	response, err := http.Get("https://covid19.mathdro.id/api/countries/" + country)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	responseData, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var responseObject ResponseCountryCase
+	json.Unmarshal(responseData, &responseObject)
+
+	lastTimeUpdate := (responseObject.CLastUpdate)
+	t, err := time.Parse(time.RFC3339, lastTimeUpdate)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("--- Coronavirus 19 Disease " + country + " Cases ---")
+	fmt.Println("Country :", country)
+	p.Printf("Status Confirmed : %d\n", responseObject.CConfirmed.Value)
+	p.Printf("Status Recovered : %d\n", responseObject.CRecovered.Value)
+	p.Printf("Status Deaths : %d\n", responseObject.CDeaths.Value)
+	fmt.Println("Last Updated : ", t)
 }
 
 func getCountry() {
@@ -73,10 +185,10 @@ func getCountry() {
 		fmt.Println(err)
 	}
 
-	var responseObject Response
+	var responseObject ResponseCountries
 	json.Unmarshal(responseData, &responseObject)
 
-	for i := 0; i < len(responseObject.Countries); i++  {
+	for i := 0; i < len(responseObject.Countries); i++ {
 		fmt.Println(responseObject.Countries[i].Name)
 	}
 
